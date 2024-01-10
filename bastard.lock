@@ -1,15 +1,16 @@
 [package]
 name = royalbed
-cmake = 3.23.2
-bastard = 0.16.0
+cmake = 3.22.1
+bastard = 0.16.9
 
 [dependencies]
-asio = { git = "git@gitlab.olimp.lan:github/standalone-asio.git", rev = "0d4e89a1", interface = "asio/include" }
-fmt = { git = "git@gitlab.olimp.lan:github/fmtlib.git", rev = "b6f4ceae" }
-gsl = { git = "git@gitlab.olimp.lan:github/gsl.git", rev = "0f6dbc9", interface = "include" }
-nhope = { git = "git@gitlab.olimp.lan:alekseev/nhope.git", rev = "ca27f40" }
-nlohmann_json = { git = "git@gitlab.olimp.lan:github/nlohmann-json.git", rev = "4f8fba14" }
-spdlog = { git = "git@gitlab.olimp.lan:gabime/spdlog.git", rev = "eb322062" }
+asio = { git = "git@gitlab.radio.voz:github/asio.git", rev = "0d4e89a1", interface = "asio/include" }
+fmt = { git = "git@gitlab.radio.voz:github/fmtlib.git", rev = "a0b8a92e" }
+nlohmann_json = { git = "git@gitlab.radio.voz:github/nlohmann-json.git", rev = "bc889afb" }
+spdlog = { git = "git@gitlab.radio.voz:github/spdlog.git", rev = "7e635fca" }
+gsl = { git = "git@gitlab.radio.voz:github/gsl.git", rev = "a353456", interface = "include" }
+nhope = { git = "git@gitlab.radio.voz:github/alekseev/nhope.git", rev = "b4ae5a9" }
 
 [dev-dependencies]
-gtest = { git = "git@gitlab.olimp.lan:google/googletest.git", rev = "79f5982c" }
+gtest = { git = "git@gitlab.radio.voz:github/google/googletest.git", rev = "89b25572" }
+

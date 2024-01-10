@@ -4,7 +4,7 @@ stages:
 
 build-job:
   stage: build
-  image: ubuntu:20.04-build
+  image: ubuntu:22.04-build
   script:
     - mkdir build && cd build
     - cmake .. -DCMAKE_BUILD_TYPE=Debug -DROYALBED_COVERAGE_ENABLED=ON
@@ -16,7 +16,7 @@ build-job:
 
 test-job:
   stage: test
-  image: ubuntu:20.04-build
+  image: ubuntu:22.04-build
   script:
     - cd build
     - cmake --build . --target royal_bed_coverage

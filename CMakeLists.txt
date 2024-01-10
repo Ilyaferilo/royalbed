@@ -48,7 +48,7 @@ if(ROYALBED_COVERAGE_ENABLED)
     append_coverage_compiler_flags()
     setup_target_for_coverage_gcovr_html(
           NAME royal_bed_coverage
-          EXECUTABLE ./tests --gtest_output=xml:junit-report.xml --gtest_print_file_info
+          EXECUTABLE ./tests --gtest_output=xml:junit-report.xml
           EXCLUDE ".deps" "tests" "build" "examples" "lib/3rdparty/*"
           )
 endif()
@@ -59,7 +59,7 @@ endif()
 
 if(ROYALBED_MEMORY_SANITIZER_ENABLED)
     enable_memory_sanitizer(
-        TARGET ${BASTARD_PACKAGE_NAME} 
+        TARGET ${BASTARD_PACKAGE_NAME}
         blacklist ${CMAKE_CURRENT_LIST_DIR}/sanitize-blacklist)
 endif()
 

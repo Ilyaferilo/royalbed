@@ -12,7 +12,27 @@
 #include "nhope/io/pushback-reader.h"
 #include "nhope/io/string-reader.h"
 
-class SlowSock final : public nhope::TcpSocket
+class BaseSock: public nhope::TcpSocket{
+    public:
+    void ioCancel() override
+    {}
+
+    void setOptions(const Options& /*opts*/) override
+    {}
+
+    [[nodiscard]] Options options() const override
+    {
+        return {};
+    }
+
+    [[nodiscard]] NativeHandle nativeHandle() override
+    {
+        return {};
+    }
+
+};
+
+class SlowSock final : public BaseSock
 {
 public:
     explicit SlowSock(nhope::AOContext& parent)
@@ -59,7 +79,7 @@ private:
     nhope::AOContext m_aoCtx;
 };
 
-class BrokenSock final : public nhope::TcpSocket
+class BrokenSock final : public BaseSock
 {
 public:
     explicit BrokenSock(nhope::AOContext& parent)
@@ -104,7 +124,7 @@ private:
     nhope::AOContext m_aoCtx;
 };
 
-class NullSock final : public nhope::TcpSocket
+class NullSock final : public BaseSock
 {
 public:
     explicit NullSock(nhope::AOContext& parent)
@@ -113,14 +133,14 @@ public:
 
     void write(gsl::span<const std::uint8_t> data, nhope::IOHandler handler) override
     {
-        m_aoCtx.exec([this, n = data.size(), handler = std::move(handler)] {
+        m_aoCtx.exec([n = data.size(), handler = std::move(handler)] {
             handler(nullptr, n);
         });
     }
 
     void read(gsl::span<std::uint8_t> /*buf*/, nhope::IOHandler handler) override
     {
-        m_aoCtx.exec([this, handler = std::move(handler)] {
+        m_aoCtx.exec([handler = std::move(handler)] {
             handler(nullptr, 0);
         });
     }
@@ -153,7 +173,7 @@ inline nhope::PushbackReaderPtr inputStream(nhope::AOContext& aoCtx, std::string
     return PushbackReader::create(aoCtx, StringReader::create(aoCtx, std::move(request)));
 }
 
-class EchoSock final : public nhope::TcpSocket
+class EchoSock final : public BaseSock
 {
 public:
     explicit EchoSock(nhope::AOContext& parent, const std::string& data)
