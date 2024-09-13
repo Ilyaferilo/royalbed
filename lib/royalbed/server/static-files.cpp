@@ -12,6 +12,7 @@
 #include "fmt/format.h"
 #include "cmrc/cmrc.hpp"
 
+#include "fmt/ranges.h"
 #include "nhope/async/future.h"
 #include "nhope/io/string-reader.h"
 

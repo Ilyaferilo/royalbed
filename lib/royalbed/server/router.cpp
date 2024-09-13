@@ -5,7 +5,6 @@
 #include <filesystem>
 #include <memory>
 #include <stdexcept>
-#include <stop_token>
 #include <string_view>
 #include <string>
 #include <system_error>
@@ -16,10 +15,10 @@
 #include <vector>
 
 #include "fmt/core.h"
+#include "fmt/ranges.h"
 
 #include "nhope/async/future.h"
 #include "nhope/utils/scope-exit.h"
-#include "nhope/io/string-reader.h"
 
 #include "royalbed/common/detail/string-utils.h"
 #include "royalbed/common/response.h"
@@ -69,7 +68,7 @@ std::string_view limitPathByDepth(std::string_view path, std::size_t depth)
     }
 
     if (depth == 2) {
-        // The first semgent
+        // The first segment
         assert(!path.empty());   // NOLINT
         return path.substr(0, path.find('/'));
     }
@@ -111,23 +110,18 @@ std::string normalizePath(std::string_view path)
 }
 
 const auto defaultNotFoundHandler = LowLevelHandler{[](RequestContext& ctx) {
-    ctx.log->error("Resource route \"{}\" not found", ctx.request.uri.path);
-
-    ctx.response.status = HttpStatus::NotFound;
-    ctx.response.statusMessage = HttpStatus::message(HttpStatus::NotFound);
-
+    const auto err = fmt::format("Resource route \"{}\" not found", ctx.request.uri.path);
+    ctx.log->error(err);
+    ctx.response = common::makePlainTextResponse(ctx.aoCtx, HttpStatus::NotFound, err);
     return nhope::makeReadyFuture();
 }};
 
 const auto defaultMethodNotAllowedHandler = LowLevelHandler{[](RequestContext& ctx) {
-    ctx.log->error("Method \"{}\" not allowed", ctx.request.method);
-
+    const auto err = fmt::format("Method \"{}\" not allowed", ctx.request.method);
+    ctx.log->error(err);
     const auto allowMethods = ctx.router.allowMethods(ctx.request.uri.path);
-
-    ctx.response.status = HttpStatus::MethodNotAllowed;
-    ctx.response.statusMessage = HttpStatus::message(HttpStatus::MethodNotAllowed);
+    ctx.response = common::makePlainTextResponse(ctx.aoCtx, HttpStatus::MethodNotAllowed, err);
     ctx.response.headers["Allow"] = fmt::format("{}", fmt::join(allowMethods, ", "));
-
     return nhope::makeReadyFuture();
 }};
 

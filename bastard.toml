@@ -10,7 +10,7 @@ path = "tests"
 
 [dependencies]
 asio = { git = "git@gitlab.radio.voz:github/asio.git", tag = "asio-1-22-0", interface = "asio/include" }
-fmt = { git  = "git@gitlab.radio.voz:github/fmtlib.git", tag = "10.0.0" }
+fmt = { git  = "git@gitlab.radio.voz:github/fmtlib.git", tag = "11.0.2" }
 nlohmann_json = { git = "git@gitlab.radio.voz:github/nlohmann-json.git", tag = "v3.11.2" }
 spdlog = { git = "git@gitlab.radio.voz:github/spdlog.git", tag = "v1.12.0" }
 nhope = {git = "git@gitlab.radio.voz:github/alekseev/nhope.git", branch = "internal"}

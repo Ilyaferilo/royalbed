@@ -1,15 +1,15 @@
 [package]
 name = royalbed
 cmake = 3.22.1
-bastard = 0.16.9
+bastard = 0.16.11
 
 [dependencies]
 asio = { git = "git@gitlab.radio.voz:github/asio.git", rev = "0d4e89a1", interface = "asio/include" }
-fmt = { git = "git@gitlab.radio.voz:github/fmtlib.git", rev = "a0b8a92e" }
+fmt = { git = "git@gitlab.radio.voz:github/fmtlib.git", rev = "0c9fce2f" }
 nlohmann_json = { git = "git@gitlab.radio.voz:github/nlohmann-json.git", rev = "bc889afb" }
 spdlog = { git = "git@gitlab.radio.voz:github/spdlog.git", rev = "7e635fca" }
 gsl = { git = "git@gitlab.radio.voz:github/gsl.git", rev = "a353456", interface = "include" }
-nhope = { git = "git@gitlab.radio.voz:github/alekseev/nhope.git", rev = "b4ae5a9" }
+nhope = { git = "git@gitlab.radio.voz:github/alekseev/nhope.git", rev = "11663eb" }
 
 [dev-dependencies]
 gtest = { git = "git@gitlab.radio.voz:github/google/googletest.git", rev = "89b25572" }
