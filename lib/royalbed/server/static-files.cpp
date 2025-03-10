@@ -1,6 +1,8 @@
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <filesystem>
+#include <fstream>
 #include <list>
 #include <map>
 #include <memory>
@@ -8,12 +10,17 @@
 #include <stdexcept>
 #include <string_view>
 #include <string>
+#include <vector>
 
 #include "fmt/format.h"
 #include "cmrc/cmrc.hpp"
 
 #include "fmt/ranges.h"
+#include "nhope/async/ao-context.h"
 #include "nhope/async/future.h"
+#include "nhope/async/thread-executor.h"
+#include "nhope/io/file.h"
+#include "nhope/io/io-device.h"
 #include "nhope/io/string-reader.h"
 
 #include "royalbed/common/mime-type.h"
@@ -52,30 +59,26 @@ std::string removeEncoderExtension(std::string_view filePath)
     return std::string(filePath.substr(0, encoderExtensionPos));
 }
 
-void publicFile(Router& router, const cmrc::embedded_filesystem& fs, const cmrc::directory_entry& entry,
+void publicFile(Router& router, const std::string_view fileName, const std::vector<std::uint8_t>& data,
                 std::string_view parentPath)
-
 {
-    const auto& filename = entry.filename();
-
-    auto resourcePath = join({parentPath, filename});
-    const auto file = fs.open(resourcePath);
+    auto resourcePath = join({parentPath, fileName});
     const auto contentEncoding = getContentEncodingByExtension(resourcePath);
     if (contentEncoding) {
         resourcePath = removeEncoderExtension(resourcePath);
     }
     router.get(resourcePath,
-               [file, contentEncoding,
+               [data, contentEncoding,
                 contentType = std::string(common::mimeTypeForFileName(resourcePath))](RequestContext& ctx) {
-                   ctx.response.headers["Content-Length"] = std::to_string(file.size());
+                   ctx.response.headers["Content-Length"] = std::to_string(data.size());
                    ctx.response.headers["Content-Type"] = contentType;
 
                    if (contentEncoding != std::nullopt) {
                        ctx.response.headers["Content-Encoding"] = contentEncoding.value();
                    };
-                   ctx.response.body = nhope::StringReader::create(ctx.aoCtx, {file.begin(), file.end()});
+                   ctx.response.body = nhope::StringReader::create(ctx.aoCtx, {(const char*)data.data(), data.size()});
                });
-    if (filename == indexHtml) {
+    if (fileName == indexHtml) {
         // Redirect to index page
         router.get(parentPath, [](RequestContext& ctx) {
             auto path = ctx.request.uri.path;
@@ -86,6 +89,15 @@ void publicFile(Router& router, const cmrc::embedded_filesystem& fs, const cmrc:
             ctx.response.status = HttpStatus::Found;
         });
     }
+}
+
+void publicFile(Router& router, const cmrc::embedded_filesystem& fs, const cmrc::directory_entry& entry,
+                std::string_view parentPath)
+{
+    const auto& filename = entry.filename();
+    auto resourcePath = join({parentPath, filename});
+    const auto file = fs.open(resourcePath);
+    publicFile(router, filename, {file.begin(), file.end()}, parentPath);
 }
 
 void publicDirEntry(Router& router, const cmrc::embedded_filesystem& fs, const cmrc::directory_entry& entry,
@@ -102,6 +114,31 @@ void publicDirEntry(Router& router, const cmrc::embedded_filesystem& fs, const c
     }
 }
 
+void publicDirEntry(Router& router, const std::filesystem::path& fs, const std::filesystem::directory_entry& entry,
+                    std::string_view rootFolder, std::string_view parentPath = "")
+{
+    if (entry.is_regular_file()) {
+        const auto& filename = entry.path().filename();
+        const auto filePath = fs / filename;
+        nhope::ThreadExecutor ex;
+        nhope::AOContext ctx(ex);
+        const auto dev = nhope::File::open(ctx, filePath.c_str(), nhope::OpenFileMode::ReadOnly);
+        const auto data = nhope::readAll(*dev).get();
+        std::string_view pp = parentPath;
+        if (!parentPath.empty()) {
+            pp = parentPath.substr(rootFolder.size());
+        }
+        publicFile(router, filename.c_str(), data, pp);
+        return;
+    }
+    if (entry.is_directory()) {
+        const auto entryPath = join({parentPath, entry.path().c_str()});
+        for (const auto& subEntry : std::filesystem::directory_iterator(entryPath)) {
+            publicDirEntry(router, fs / entry, subEntry, rootFolder, entryPath);
+        }
+    }
+}
+
 }   // namespace
 
 Router staticFiles(const cmrc::embedded_filesystem& fs)
@@ -109,6 +146,16 @@ Router staticFiles(const cmrc::embedded_filesystem& fs)
     Router router;
     for (const auto& entry : fs.iterate_directory("")) {
         publicDirEntry(router, fs, entry);
+    }
+    return router;
+}
+
+Router staticFiles(const std::filesystem::path& fs)
+{
+    Router router;
+    const std::string_view root = fs.c_str();
+    for (const std::filesystem::directory_entry& entry : std::filesystem::directory_iterator(fs)) {
+        publicDirEntry(router, fs, entry, root);
     }
     return router;
 }

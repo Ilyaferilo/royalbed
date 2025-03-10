@@ -1,6 +1,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <optional>
 #include <random>
 #include <span>
@@ -10,6 +12,7 @@
 #include <gtest/gtest.h>
 
 #include "cmrc/cmrc.hpp"
+#include "nhope/utils/scope-exit.h"
 #include "spdlog/spdlog.h"
 
 #include "nhope/async/ao-context.h"
@@ -107,6 +110,20 @@ bool eq(std::span<const char> v1, std::span<const std::uint8_t> v2)
     return memcmp(v1.data(), v2.data(), v2.size()) == 0;
 }
 
+std::filesystem::path testLocalFs()
+{
+    std::filesystem::path dir = std::filesystem::temp_directory_path() / "local-fs-test";
+    std::filesystem::create_directory(dir);
+
+    for (int i = 0; i < 3; i++) {
+        std::ofstream file(dir / ("test" + std::to_string(i)));
+        const auto data = genRandom(42);
+        file.write(data.data(), data.size());
+    }
+
+    return dir;
+}
+
 }   // namespace
 
 TEST(StaticFiles, getFiles)   // NOLINT
@@ -179,4 +196,24 @@ TEST(Swagger, Api)   // NOLINT
         EXPECT_TRUE(eq(std::span{htmlBody.begin(), htmlBody.end()}, body));
         EXPECT_EQ(reqCtx.response.headers["Content-Type"], "text/html; charset=utf-8");
     }
+}
+
+TEST(StaticFiles, getSystemFiles)   // NOLINT
+{
+    nhope::ThreadExecutor th;
+    nhope::AOContext aoCtx(th);
+    std::filesystem::path folder(testLocalFs());
+    nhope::ScopeExit closeDir([folder]() {
+        std::filesystem::remove_all(folder);
+    });
+    const auto router = staticFiles(folder);
+    RequestContext reqCtx{
+      .num = 1,
+      .log = nullLogger(),
+      .router = router,
+      .aoCtx = nhope::AOContext(aoCtx),
+    };
+
+    router.route("GET", "/test1").handler(reqCtx).get();
+    EXPECT_EQ(reqCtx.response.status, HttpStatus::Ok);
 }
