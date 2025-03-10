@@ -7,6 +7,7 @@
 #include <random>
 #include <span>
 #include <string>
+#include <tuple>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -110,18 +111,27 @@ bool eq(std::span<const char> v1, std::span<const std::uint8_t> v2)
     return memcmp(v1.data(), v2.data(), v2.size()) == 0;
 }
 
-std::filesystem::path testLocalFs()
+std::tuple<std::filesystem::path, std::vector<char>, std::vector<char>> testLocalFs()
 {
-    std::filesystem::path dir = std::filesystem::temp_directory_path() / "local-fs-test";
+    std::filesystem::path dir =
+      // std::filesystem::temp_directory_path() /
+      "./local-fs-test";
     std::filesystem::create_directory(dir);
+    std::filesystem::create_directory(dir / "folder1");
 
-    for (int i = 0; i < 3; i++) {
-        std::ofstream file(dir / ("test" + std::to_string(i)));
-        const auto data = genRandom(42);
+    const auto data = genRandom(42);
+    const auto data2 = genRandom(42);
+    {
+        std::ofstream file(dir / ("test1"));
         file.write(data.data(), data.size());
     }
 
-    return dir;
+    {
+        std::ofstream file(dir / "folder1" / "test2");
+        file.write(data2.data(), data2.size());
+    }
+
+    return {dir, data, data2};
 }
 
 }   // namespace
@@ -202,18 +212,37 @@ TEST(StaticFiles, getSystemFiles)   // NOLINT
 {
     nhope::ThreadExecutor th;
     nhope::AOContext aoCtx(th);
-    std::filesystem::path folder(testLocalFs());
+    const auto [folder, d1, d2] = testLocalFs();
+
     nhope::ScopeExit closeDir([folder]() {
         std::filesystem::remove_all(folder);
     });
     const auto router = staticFiles(folder);
-    RequestContext reqCtx{
-      .num = 1,
-      .log = nullLogger(),
-      .router = router,
-      .aoCtx = nhope::AOContext(aoCtx),
-    };
+    {
+        RequestContext reqCtx{
+          .num = 1,
+          .log = nullLogger(),
+          .router = router,
+          .aoCtx = nhope::AOContext(aoCtx),
+        };
 
-    router.route("GET", "/test1").handler(reqCtx).get();
-    EXPECT_EQ(reqCtx.response.status, HttpStatus::Ok);
+        router.route("GET", "/test1").handler(reqCtx).get();
+        EXPECT_EQ(reqCtx.response.status, HttpStatus::Ok);
+        const auto body = nhope::readAll(*reqCtx.response.body).get();
+        EXPECT_TRUE(eq(d1, body));
+    }
+
+    {
+        RequestContext reqCtx{
+          .num = 2,
+          .log = nullLogger(),
+          .router = router,
+          .aoCtx = nhope::AOContext(aoCtx),
+        };
+
+        router.route("GET", "/folder1/test2").handler(reqCtx).get();
+        EXPECT_EQ(reqCtx.response.status, HttpStatus::Ok);
+        const auto body = nhope::readAll(*reqCtx.response.body).get();
+        EXPECT_TRUE(eq(d2, body));
+    }
 }
