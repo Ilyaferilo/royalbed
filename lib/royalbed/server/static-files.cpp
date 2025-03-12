@@ -132,7 +132,7 @@ void publicDirEntry(Router& router, const std::filesystem::path& fs, const std::
         return;
     }
     if (entry.is_directory()) {
-        const auto entryPath = join({parentPath, entry.path().c_str()});
+        const std::string_view entryPath = entry.path().c_str();
         for (const auto& subEntry : std::filesystem::directory_iterator(entryPath)) {
             publicDirEntry(router, entry, subEntry, rootFolder, entryPath);
         }

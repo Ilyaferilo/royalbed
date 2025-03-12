@@ -113,14 +113,14 @@ bool eq(std::span<const char> v1, std::span<const std::uint8_t> v2)
 
 std::tuple<std::filesystem::path, std::vector<char>, std::vector<char>> testLocalFs()
 {
-    std::filesystem::path dir =
-      // std::filesystem::temp_directory_path() /
-      "./local-fs-test";
+    std::filesystem::path dir = std::filesystem::temp_directory_path() / "local-fs-test";
     std::filesystem::create_directory(dir);
     std::filesystem::create_directory(dir / "folder1");
+    std::filesystem::create_directory(dir / "folder1" / "folder2");
 
     const auto data = genRandom(42);
     const auto data2 = genRandom(42);
+
     {
         std::ofstream file(dir / ("test1"));
         file.write(data.data(), data.size());
@@ -129,6 +129,10 @@ std::tuple<std::filesystem::path, std::vector<char>, std::vector<char>> testLoca
     {
         std::ofstream file(dir / "folder1" / "test2");
         file.write(data2.data(), data2.size());
+    }
+    {
+        std::ofstream file(dir / "folder1" / "folder2" / "test3");
+        file.write(data.data(), data.size());
     }
 
     return {dir, data, data2};
@@ -244,5 +248,19 @@ TEST(StaticFiles, getSystemFiles)   // NOLINT
         EXPECT_EQ(reqCtx.response.status, HttpStatus::Ok);
         const auto body = nhope::readAll(*reqCtx.response.body).get();
         EXPECT_TRUE(eq(d2, body));
+    }
+
+    {
+        RequestContext reqCtx{
+          .num = 2,
+          .log = nullLogger(),
+          .router = router,
+          .aoCtx = nhope::AOContext(aoCtx),
+        };
+
+        router.route("GET", "/folder1/folder2/test3").handler(reqCtx).get();
+        EXPECT_EQ(reqCtx.response.status, HttpStatus::Ok);
+        const auto body = nhope::readAll(*reqCtx.response.body).get();
+        EXPECT_TRUE(eq(d1, body));
     }
 }
