@@ -67,27 +67,20 @@ void publicFile(Router& router, const std::string_view fileName, const std::vect
     if (contentEncoding) {
         resourcePath = removeEncoderExtension(resourcePath);
     }
-    router.get(resourcePath,
-               [data, contentEncoding,
-                contentType = std::string(common::mimeTypeForFileName(resourcePath))](RequestContext& ctx) {
-                   ctx.response.headers["Content-Length"] = std::to_string(data.size());
-                   ctx.response.headers["Content-Type"] = contentType;
+    auto handle = [data, contentEncoding,
+                   contentType = std::string(common::mimeTypeForFileName(resourcePath))](RequestContext& ctx) {
+        ctx.response.headers["Content-Length"] = std::to_string(data.size());
+        ctx.response.headers["Content-Type"] = contentType;
 
-                   if (contentEncoding != std::nullopt) {
-                       ctx.response.headers["Content-Encoding"] = contentEncoding.value();
-                   };
-                   ctx.response.body = nhope::StringReader::create(ctx.aoCtx, {(const char*)data.data(), data.size()});
-               });
+        if (contentEncoding != std::nullopt) {
+            ctx.response.headers["Content-Encoding"] = contentEncoding.value();
+        };
+        ctx.response.body = nhope::StringReader::create(ctx.aoCtx, {(const char*)data.data(), data.size()});
+    };
+    router.get(resourcePath, handle);
     if (fileName == indexHtml) {
         // Redirect to index page
-        router.get(parentPath, [](RequestContext& ctx) {
-            auto path = ctx.request.uri.path;
-            if (!path.empty() && path.back() == '/') {
-                path.pop_back();
-            }
-            ctx.response.headers["Location"] = fmt::format("{}/{}", path, indexHtml);
-            ctx.response.status = HttpStatus::Found;
-        });
+        router.get(parentPath, handle);
     }
 }
 
