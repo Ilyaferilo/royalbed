@@ -1,11 +1,15 @@
+#include <algorithm>
 #include <cassert>
 #include <cstddef>
+#include <cstdlib>
+#include <cstring>
 #include <exception>
+#include <iterator>
 #include <memory>
-#include <span>
+#include <string_view>
 
+#include "3rdparty/llhttp/llhttp.h"
 #include "nhope/async/ao-context.h"
-#include "nhope/async/safe-callback.h"
 #include "nhope/io/pushback-reader.h"
 
 #include "royalbed/common/http-error.h"
@@ -19,9 +23,11 @@ namespace {
 class BodyReaderImpl final : public BodyReader
 {
 public:
-    BodyReaderImpl(nhope::AOContextRef& aoCtx, nhope::PushbackReader& device, std::unique_ptr<llhttp_t> httpParser)
+    BodyReaderImpl(nhope::AOContextRef& aoCtx, nhope::PushbackReader& device, std::unique_ptr<llhttp_t> httpParser,
+                   bool isChunked)
       : m_aoCtxRef(aoCtx)
       , m_device(device)
+      , m_isChunked(isChunked)
       , m_httpParser(std::move(httpParser))
     {
         // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
@@ -57,12 +63,27 @@ public:
                     return;
                 }
 
-                if (n > m_bodyPieceSize) {
-                    const auto remains = buf.subspan(m_bodyPieceSize, n - m_bodyPieceSize);
-                    m_device.unread(remains);
-                }
+                if (m_isChunked) {
+                    constexpr std::string_view crlf = "\r\n";
+                    const auto it = std::find_first_of(buf.begin(), buf.end(), crlf.begin(), crlf.end());
+                    if (it == buf.end()) {
+                        handler(
+                          std::make_exception_ptr(HttpError(HttpStatus::BadRequest, "incorrect body chunk received")),
+                          n);
+                        return;
+                    }
+                    const auto dataPos = std::distance(buf.begin(), it + crlf.size());
+                    const auto dataSize = std::strtoul((const char*)buf.data(), nullptr, 16);
+                    std::memmove(buf.data(), buf.data() + dataPos, dataSize);
+                    handler(nullptr, dataSize);
+                } else {
+                    if (n > m_bodyPieceSize) {
+                        const auto remains = buf.subspan(m_bodyPieceSize, n - m_bodyPieceSize);
+                        m_device.unread(remains);
+                    }
 
-                handler(nullptr, m_bodyPieceSize);
+                    handler(nullptr, m_bodyPieceSize);
+                }
             });
         });
     }
@@ -91,6 +112,8 @@ private:
     nhope::AOContextRef m_aoCtxRef;
     nhope::PushbackReader& m_device;
 
+    const bool m_isChunked;
+
     std::unique_ptr<llhttp_t> m_httpParser;
     std::size_t m_bodyPieceSize = 0;
     bool m_eof = false;
@@ -99,9 +122,9 @@ private:
 }   // namespace
 
 BodyReaderPtr BodyReader::create(nhope::AOContextRef& aoCtx, nhope::PushbackReader& device,
-                                 std::unique_ptr<llhttp_t> httpParser)
+                                 std::unique_ptr<llhttp_t> httpParser, bool isChunked)
 {
-    return std::make_unique<BodyReaderImpl>(aoCtx, device, std::move(httpParser));
+    return std::make_unique<BodyReaderImpl>(aoCtx, device, std::move(httpParser), isChunked);
 }
 
 }   // namespace royalbed::common::detail

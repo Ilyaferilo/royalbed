@@ -89,7 +89,12 @@ private:
         // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
         const auto* beginBody = reinterpret_cast<const std::uint8_t*>(llhttp_get_error_pos(m_httpParser.get()));
         m_device.unread({std::to_address(beginBody), std::to_address(data.end())});
-        m_response.body = BodyReader::create(m_aoCtx, m_device, std::move(m_httpParser));
+        bool isChunkedBody{false};
+        if (auto it = m_response.headers.find("Transfer-Encoding"); it != m_response.headers.end()) {
+            isChunkedBody = it->second == "chunked";
+        }
+
+        m_response.body = BodyReader::create(m_aoCtx, m_device, std::move(m_httpParser), isChunkedBody);
 
         m_promise.setValue(std::move(m_response));
 

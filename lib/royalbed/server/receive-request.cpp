@@ -89,7 +89,12 @@ private:
         const auto* beginBody = reinterpret_cast<const std::uint8_t*>(llhttp_get_error_pos(m_httpParser.get()));
         m_device.unread({std::to_address(beginBody), std::to_address(data.end())});
         m_request.method = llhttp_method_name(static_cast<llhttp_method_t>(m_httpParser->method));
-        m_request.body = BodyReader::create(m_aoCtx, m_device, std::move(m_httpParser));
+        bool isChunkedBody{false};
+        if (auto it = m_request.headers.find("Transfer-Encoding"); it != m_request.headers.end()) {
+            isChunkedBody = it->second == "chunked";
+        }
+
+        m_request.body = BodyReader::create(m_aoCtx, m_device, std::move(m_httpParser), isChunkedBody);
 
         m_promise.setValue(std::move(m_request));
 

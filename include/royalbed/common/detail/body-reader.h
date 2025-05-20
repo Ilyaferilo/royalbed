@@ -16,7 +16,7 @@ class BodyReader : public nhope::Reader
 {
 public:
     static BodyReaderPtr create(nhope::AOContextRef& aoCtx, nhope::PushbackReader& device,
-                                std::unique_ptr<llhttp_t> httpParser);
+                                std::unique_ptr<llhttp_t> httpParser, bool isChunked);
 };
 
 }   // namespace royalbed::common::detail
