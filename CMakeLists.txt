@@ -15,60 +15,74 @@ option(ROYALBED_ADDRESS_SANITIZER_ENABLED "enable address sanitizer" OFF)
 option(ROYALBED_THREAD_SANITIZER_ENABLED "enable thread sanitizer" OFF)
 option(ROYALBED_MEMORY_SANITIZER_ENABLED "enable memory sanitizer" OFF)
 
-cmrc_add_resource_library(swaggerFiles
-    NAMESPACE royalbed::swagger
-    swagger/index.html
-    # swagger-ui v4.6.1
-    swagger/ui/favicon-16x16.png
-    swagger/ui/favicon-32x32.png
-    swagger/ui/swagger-ui-bundle.js.gz
-    swagger/ui/swagger-ui.css.gz
-    swagger/ui/swagger-ui-standalone-preset.js.gz
-)
-target_compile_features(swaggerFiles PRIVATE cxx_std_17)
-target_link_libraries(${BASTARD_PACKAGE_NAME} swaggerFiles)
+cmrc_add_resource_library(
+  swaggerFiles
+  NAMESPACE
+  royalbed::swagger
+  swagger/index.html
+  # swagger-ui v4.6.1
+  swagger/ui/favicon-16x16.png
+  swagger/ui/favicon-32x32.png
+  swagger/ui/swagger-ui-bundle.js.gz
+  swagger/ui/swagger-ui.css.gz
+  swagger/ui/swagger-ui-standalone-preset.js.gz)
 
-cmrc_add_resource_library(redocFiles
-    NAMESPACE royalbed::redoc
-    redoc/index.html
-    # redoc 2.0.0-rc.64
-    redoc/redoc.standalone.js.gz
-)
+# Поиск пакета OpenSSL
+find_package(OpenSSL REQUIRED)
+if(NOT OPENSSL_FOUND)
+  message(FATAL_ERROR "OpenSSL not found!")
+endif()
+
+target_compile_features(swaggerFiles PRIVATE cxx_std_17)
+target_link_libraries(${BASTARD_PACKAGE_NAME} swaggerFiles OpenSSL::SSL
+                      OpenSSL::Crypto)
+
+cmrc_add_resource_library(
+  redocFiles NAMESPACE royalbed::redoc redoc/index.html
+  # redoc 2.0.0-rc.64
+  redoc/redoc.standalone.js.gz)
 target_compile_features(redocFiles PRIVATE cxx_std_17)
 target_link_libraries(${BASTARD_PACKAGE_NAME} redocFiles)
 
 if(ROYALBED_THREAD_SANITIZER_ENABLED)
-    enable_thread_sanitizer(
-        blacklist ${CMAKE_CURRENT_LIST_DIR}/sanitize-blacklist)
+  enable_thread_sanitizer(blacklist
+                          ${CMAKE_CURRENT_LIST_DIR}/sanitize-blacklist)
 endif()
 
 if(ROYALBED_COVERAGE_ENABLED)
-    message(STATUS "royalbed enabling coverage")
-    include(cmake/CodeCoverage.cmake)
-    append_coverage_compiler_flags()
-    setup_target_for_coverage_gcovr_html(
-          NAME royal_bed_coverage
-          EXECUTABLE ./tests --gtest_output=xml:junit-report.xml
-          EXCLUDE ".deps" "tests" "build" "examples" "lib/3rdparty/*"
-          )
+  message(STATUS "royalbed enabling coverage")
+  include(cmake/CodeCoverage.cmake)
+  append_coverage_compiler_flags()
+  setup_target_for_coverage_gcovr_html(
+    NAME
+    royal_bed_coverage
+    EXECUTABLE
+    ./tests
+    --gtest_output=xml:junit-report.xml
+    EXCLUDE
+    ".deps"
+    "tests"
+    "build"
+    "examples"
+    "lib/3rdparty/*")
 endif()
 
 if(ROYALBED_ADDRESS_SANITIZER_ENABLED)
-    enable_address_sanitizer(TARGET ${BASTARD_PACKAGE_NAME})
+  enable_address_sanitizer(TARGET ${BASTARD_PACKAGE_NAME})
 endif()
 
 if(ROYALBED_MEMORY_SANITIZER_ENABLED)
-    enable_memory_sanitizer(
-        TARGET ${BASTARD_PACKAGE_NAME}
-        blacklist ${CMAKE_CURRENT_LIST_DIR}/sanitize-blacklist)
+  enable_memory_sanitizer(TARGET ${BASTARD_PACKAGE_NAME} blacklist
+                          ${CMAKE_CURRENT_LIST_DIR}/sanitize-blacklist)
 endif()
 
-if (WIN32)
-    target_compile_definitions(${BASTARD_PACKAGE_NAME} PUBLIC -D_WIN32_WINNT=0x0601)
+if(WIN32)
+  target_compile_definitions(${BASTARD_PACKAGE_NAME}
+                             PUBLIC -D_WIN32_WINNT=0x0601)
 endif()
 
-if ("${CMAKE_SOURCE_DIR}" STREQUAL "${CMAKE_CURRENT_SOURCE_DIR}")
-    add_subdirectory(examples)
+if("${CMAKE_SOURCE_DIR}" STREQUAL "${CMAKE_CURRENT_SOURCE_DIR}")
+  add_subdirectory(examples)
 endif()
 
 # EnableWarnings(${BASTARD_PACKAGE_NAME})

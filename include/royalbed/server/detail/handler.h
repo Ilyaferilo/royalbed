@@ -41,7 +41,7 @@ constexpr bool checkFunctionArgs(std::index_sequence<I...> /*unused*/)
 {
     using namespace nhope;
     using FnProps = FunctionProps<decltype(std::function(std::declval<Fn>()))>;
-    return ((isRequstHandlerArg<std::decay_t<typename FnProps::template ArgumentType<I>>>)&&...);
+    return ((isRequstHandlerArg<std::decay_t<typename FnProps::template ArgumentType<I>>>) && ...);
 }
 
 void addContent(RequestContext& ctx, std::string content);

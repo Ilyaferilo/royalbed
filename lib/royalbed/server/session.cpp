@@ -4,11 +4,15 @@
 #include <cstddef>
 #include <cstdint>
 #include <exception>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <type_traits>
 #include <utility>
 
+#include "royalbed/common/http-error.h"
+#include "royalbed/common/http-status.h"
+#include "royalbed/server/web-socket.h"
 #include "spdlog/logger.h"
 
 #include "nhope/async/ao-context.h"
@@ -68,11 +72,12 @@ public:
       : m_num(param.num)
       , m_ctx(param.ctx)
       , m_in(param.in)
-      , m_out(param.out)      
+      , m_out(param.out)
       , m_requestCtx{
           .num = param.num,
           .log = std::move(param.log),
           .router = param.ctx.router(),
+          .webSocket = std::nullopt,
           .request{},
           .rawPathParams{},
           .response{},
@@ -134,6 +139,26 @@ private:
           });
     }
 
+    bool isWebSocketRequest() const
+    {
+        if (auto it = m_requestCtx.request.headers.find(ConnectionHeader); it != m_requestCtx.request.headers.end()) {
+            if (it->second == "Upgrade"s) {
+                if (auto upgIt = m_requestCtx.request.headers.find("Upgrade"s);
+                    upgIt != m_requestCtx.request.headers.end()) {
+                    if (upgIt->second == "websocket"s) {
+                        if (m_requestCtx.request.headers.at("Sec-Websocket-Version") != "13"s) {
+                            throw common::HttpError(
+                              common::HttpStatus::BadRequest,
+                              "websocket: unsupported version: 13 not found in 'Sec-Websocket-Version' header");
+                        }
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
     nhope::Future<void> processingRequest(Request&& req)
     {
         m_requestCtx.log->trace("request: \"{} {}\"", req.method, req.uri.path);
@@ -147,6 +172,17 @@ private:
         return this->doMiddlewares().then(aoCtx(), [this](bool doHandler) {
             if (!doHandler) {
                 return nhope::makeReadyFuture();
+            }
+
+            // check web socket upgrade
+            if (isWebSocketRequest()) {
+                const auto raw =
+                  WebSocketController::makeHandShake(m_requestCtx.request.headers.at("Sec-Websocket-Key"));
+
+                return nhope::write(m_out, raw).then(aoCtx(), [this](std::size_t) {
+                    m_requestCtx.webSocket.emplace(aoCtx(), m_in, m_out, m_requestCtx.log);
+                    return safeCall(m_requestCtx, m_handler);
+                });
             }
 
             return safeCall(m_requestCtx, m_handler);
@@ -196,8 +232,12 @@ private:
 
     nhope::Future<bool> sendResponse()
     {
+        if (m_requestCtx.webSocket.has_value()) {
+            // we don't send response to web socket
+            return nhope::makeReadyFuture<bool>(false);
+        }
         m_requestCtx.log->trace("response: {}", m_requestCtx.response.status);
-        auto needAddClose = needClose();
+        const bool needAddClose = needClose();
         if (needAddClose) {
             m_requestCtx.response.headers[ConnectionHeader] = ConnectionHeaderCloseValue;
         }

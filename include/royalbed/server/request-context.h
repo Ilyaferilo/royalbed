@@ -2,10 +2,12 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "royalbed/server/web-socket.h"
 #include "spdlog/logger.h"
 
 #include "nhope/async/ao-context.h"
@@ -25,6 +27,8 @@ struct RequestContext final
     std::shared_ptr<spdlog::logger> log;
 
     const Router& router;
+
+    std::optional<WebSocketController> webSocket;
 
     Request request;
     RawPathParams rawPathParams;
