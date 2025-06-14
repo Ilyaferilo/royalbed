@@ -51,19 +51,20 @@ public:
                     return;
                 }
 
-                // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-                llhttp_execute(m_httpParser.get(), reinterpret_cast<const char*>(buf.data()), n);
-                if (n == 0) {
-                    llhttp_finish(m_httpParser.get());
-                }
-
-                if (m_httpParser->error != HPE_OK && m_httpParser->error != HPE_PAUSED) {
-                    const auto* reason = llhttp_get_error_reason(m_httpParser.get());
-                    handler(std::make_exception_ptr(HttpError(HttpStatus::BadRequest, reason)), n);
-                    return;
-                }
-
                 if (m_isChunked) {
+                    if (m_leftProcessedChunkSize != 0) {
+                        const int l = m_leftProcessedChunkSize - n;
+                        if (l >= 0) {
+                            m_leftProcessedChunkSize -= n;
+                            handler(nullptr, n);
+                            return;
+                        }
+                        m_device.unread(buf.subspan(m_leftProcessedChunkSize));
+                        handler(nullptr, m_leftProcessedChunkSize);
+                        m_leftProcessedChunkSize = 0;
+                        return;
+                    }
+
                     constexpr std::string_view crlf = "\r\n";
                     const auto it = std::find_first_of(buf.begin(), buf.end(), crlf.begin(), crlf.end());
                     if (it == buf.end()) {
@@ -73,10 +74,37 @@ public:
                         return;
                     }
                     const auto dataPos = std::distance(buf.begin(), it + crlf.size());
-                    const auto dataSize = std::strtoul((const char*)buf.data(), nullptr, 16);
-                    std::memmove(buf.data(), buf.data() + dataPos, dataSize);
-                    handler(nullptr, dataSize);
+                    std::size_t chunkDataSize = std::strtoul((const char*)buf.data(), nullptr, 16);
+                    if (chunkDataSize == 0) {
+                        m_eof = true;
+                        handler(nullptr, 0);
+                        return;
+                    }
+                    if (chunkDataSize > n) {
+                        // received incomplete chunk
+                        m_leftProcessedChunkSize = (int)chunkDataSize;
+                        chunkDataSize = n - dataPos;
+                        m_leftProcessedChunkSize -= (int)chunkDataSize;
+                        std::memmove(buf.data(), buf.data() + dataPos, chunkDataSize);
+                    } else {
+                        // received full chunk
+                        m_device.unread(buf.subspan(dataPos + chunkDataSize));
+                        std::memmove(buf.data(), buf.data() + dataPos, chunkDataSize);
+                    }
+                    handler(nullptr, chunkDataSize);
                 } else {
+                    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+                    llhttp_execute(m_httpParser.get(), reinterpret_cast<const char*>(buf.data()), n);
+                    if (n == 0) {
+                        llhttp_finish(m_httpParser.get());
+                    }
+
+                    if (m_httpParser->error != HPE_OK && m_httpParser->error != HPE_PAUSED) {
+                        const auto* reason = llhttp_get_error_reason(m_httpParser.get());
+                        handler(std::make_exception_ptr(HttpError(HttpStatus::BadRequest, reason)), n);
+                        return;
+                    }
+
                     if (n > m_bodyPieceSize) {
                         const auto remains = buf.subspan(m_bodyPieceSize, n - m_bodyPieceSize);
                         m_device.unread(remains);
@@ -113,6 +141,8 @@ private:
     nhope::PushbackReader& m_device;
 
     const bool m_isChunked;
+
+    int m_leftProcessedChunkSize{};
 
     std::unique_ptr<llhttp_t> m_httpParser;
     std::size_t m_bodyPieceSize = 0;
