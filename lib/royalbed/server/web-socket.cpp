@@ -203,10 +203,9 @@ private:
 std::vector<std::uint8_t> WebSocketController::makeHandShake(std::string_view clientKey)
 {
     const auto sha1r = sha1(fmt::format("{}258EAFA5-E914-47DA-95CA-C5AB0DC85B11", clientKey));
-    const auto resp =
-      fmt::format("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nSec-WebSocket-Protocol: 13\r\nConnection: "
-                  "Upgrade\r\nSec-WebSocket-Accept: {}\r\n\r\n",
-                  nhope::toBase64({(const std::uint8_t*)sha1r.data(), sha1r.size()}));
+    const auto resp = fmt::format("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: "
+                                  "Upgrade\r\nSec-WebSocket-Accept: {}\r\n\r\n",
+                                  nhope::toBase64({(const std::uint8_t*)sha1r.data(), sha1r.size()}));
     return {resp.begin(), resp.end()};
 }
 
