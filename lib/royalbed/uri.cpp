@@ -181,6 +181,47 @@ Uri Uri::parseRelative(std::string_view in)
     return retval;
 }
 
+Uri Uri::parse(std::string_view uri)
+{
+    Uri result;
+
+    // Parse scheme if present
+    const auto schemeEnd = uri.find(':');
+    if (schemeEnd != std::string_view::npos) {
+        result.scheme = uri.substr(0, schemeEnd);
+        uri = tail(uri, schemeEnd + 1);
+    }
+
+    // Check for authority (//host)
+    if (uri.starts_with("//")) {
+        uri = tail(uri, 2);
+
+        // Find end of authority (path, query or fragment start)
+        const auto authEnd = uri.find_first_of("/?#");
+        const auto authority = uri.substr(0, authEnd);
+        uri = tail(uri, authEnd);
+
+        // Parse host and port
+        const auto portPos = authority.find(':');
+        if (portPos != std::string_view::npos) {
+            result.host = authority.substr(0, portPos);
+            const auto portStr = authority.substr(portPos + 1);
+            try {
+                result.port = std::stoi(std::string(portStr));
+            } catch (const std::exception&) {
+                throw UriParseError("Invalid port number");
+            }
+        } else {
+            result.host = authority;
+        }
+    }
+
+    // Parse the rest of the URI (path, query, fragment)
+    parseRelativeUri(result, uri);
+
+    return result;
+}
+
 void uriEscape(std::string& out, std::string_view in, UriEscapeMode mode)
 {
     out.reserve(out.size() + in.size() + 3 * in.size() / 4);

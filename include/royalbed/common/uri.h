@@ -29,7 +29,11 @@ struct Uri final
     [[nodiscard]] bool isRelative() const noexcept;
     [[nodiscard]] std::string toString() const;
 
+    // path[?query][#fragment]
     static Uri parseRelative(std::string_view in);
+
+    // scheme:[//authority]path[?query][#fragment]
+    static Uri parse(std::string_view uri);
 };
 
 enum class UriEscapeMode

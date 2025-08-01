@@ -17,6 +17,7 @@
 #include "royalbed/client/request.h"
 
 #include "helpers/iodevs.h"
+#include "royalbed/client/uri.h"
 #include "royalbed/common/detail/write-headers.h"
 #include "royalbed/common/response.h"
 #include "royalbed/server/detail/send-response.h"
@@ -228,4 +229,20 @@ TEST(SendRequest, SendAndReceive)   // NOLINT
     //                    .get();
     // const auto b = nhope::readAll(*res.body).get();
     // EXPECT_EQ(res.status, 200);
+}
+
+TEST(SendRequest, SendGoogle)   // NOLINT
+{
+    nhope::ThreadExecutor executor;
+    nhope::AOContext aoCtx(executor);
+
+    auto res = sendRequest(aoCtx,
+                           {
+                             .method = "GET",
+                             .uri = Uri::parse("http://www.google.com/"),
+                           })
+                 .get();
+    const auto b = nhope::readAll(*res.body).get();
+    printf((const char*)b.data());
+    EXPECT_EQ(res.status, 200);
 }

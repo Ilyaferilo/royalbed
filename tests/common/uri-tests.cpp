@@ -112,3 +112,20 @@ TEST(Uri, parseRelative)   // NOLINT
         EXPECT_EQ(uri.fragment, "frag/ ment");
     }
 }
+
+TEST(Uri, parse)   // NOLINT
+{
+    const auto uri = Uri::parse("http://172.16.23.45:8080/path/to/resource?param=value&param2=value2#fragment");
+
+    EXPECT_EQ(uri.scheme, "http");
+    EXPECT_EQ(uri.host, "172.16.23.45");
+    EXPECT_EQ(uri.port, 8080);
+    EXPECT_EQ(uri.path, "/path/to/resource");
+    EXPECT_EQ(uri.query.size(), 2);
+    EXPECT_EQ(uri.query[0].first, "param");
+    EXPECT_EQ(uri.query[0].second, "value");
+    EXPECT_EQ(uri.query[1].first, "param2");
+    EXPECT_EQ(uri.query[1].second, "value2");
+    EXPECT_EQ(uri.fragment, "fragment");
+    EXPECT_FALSE(uri.isRelative());
+}

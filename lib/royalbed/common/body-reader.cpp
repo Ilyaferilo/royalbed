@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <exception>
+#include <iostream>
 #include <iterator>
 #include <memory>
 #include <string_view>
@@ -52,29 +53,57 @@ public:
                 }
 
                 if (m_isChunked) {
+                    constexpr std::string_view crlf = "\r\n";
                     if (m_leftProcessedChunkSize != 0) {
                         const int l = m_leftProcessedChunkSize - n;
                         if (l >= 0) {
                             m_leftProcessedChunkSize -= n;
+                            counter += n;
                             handler(nullptr, n);
                             return;
                         }
-                        m_device.unread(buf.subspan(m_leftProcessedChunkSize));
-                        handler(nullptr, m_leftProcessedChunkSize);
+
+                        // Пропускаем CRLF
+                        m_device.unread(buf.subspan(m_leftProcessedChunkSize + crlf.size()));
+                        auto c = m_leftProcessedChunkSize;
+                        std::cout << "c = " << counter + c << " CUR DATA: " << (const char*)(buf.data()) << '\n'   //
+                                  << "NEW DATA: " << (const char*)(buf.data() + c + 0) << std::endl;
                         m_leftProcessedChunkSize = 0;
+                        counter = 0;
+                        handler(nullptr, c);
                         return;
                     }
 
-                    constexpr std::string_view crlf = "\r\n";
                     const auto it = std::find_first_of(buf.begin(), buf.end(), crlf.begin(), crlf.end());
                     if (it == buf.end()) {
+                        std::cout << "BAD CHUNK DATA: " << (const char*)(buf.data()) << std::endl;
                         handler(
                           std::make_exception_ptr(HttpError(HttpStatus::BadRequest, "incorrect body chunk received")),
                           n);
                         return;
                     }
                     const auto dataPos = std::distance(buf.begin(), it + crlf.size());
-                    std::size_t chunkDataSize = std::strtoul((const char*)buf.data(), nullptr, 16);
+
+                    // Добавлена проверка для strtoul
+                    char* endPtr = nullptr;
+                    const char* chunkSizeStr = reinterpret_cast<const char*>(buf.data());
+                    std::size_t chunkDataSize = std::strtoul(chunkSizeStr, &endPtr, 16);
+                    std::cout << "rx chunk size = " << chunkDataSize << std::endl;
+
+                    // Проверка на ошибки преобразования
+                    if ((endPtr == chunkSizeStr) ||   // Не удалось преобразовать ни одного символа
+                        (chunkDataSize == ULONG_MAX && errno == ERANGE) ||   // Переполнение
+                        (*endPtr != '\r' && *endPtr != ';' && *endPtr != ' ' &&
+                         *endPtr != '\t')) {   // Некорректный формат
+                        std::cout << "invalid chunk = " << (const char*)buf.data() << std::endl;
+                        handler(std::make_exception_ptr(HttpError(HttpStatus::BadRequest, "invalid chunk size format")),
+                                n);
+                        return;
+                    }
+
+                    const size_t headerSize = endPtr - chunkSizeStr;
+
+                    // std::size_t chunkDataSize = std::strtoul((const char*)buf.data(), nullptr, 16);
                     if (chunkDataSize == 0) {
                         m_eof = true;
                         handler(nullptr, 0);
@@ -85,10 +114,13 @@ public:
                         m_leftProcessedChunkSize = (int)chunkDataSize;
                         chunkDataSize = n - dataPos;
                         m_leftProcessedChunkSize -= (int)chunkDataSize;
+                        counter = chunkDataSize;
+
                         std::memmove(buf.data(), buf.data() + dataPos, chunkDataSize);
                     } else {
                         // received full chunk
-                        m_device.unread(buf.subspan(dataPos + chunkDataSize));
+                        std::cout << "received full chunk" << (const char*)buf.data() << std::endl;
+                        m_device.unread(buf.subspan(dataPos + chunkDataSize + crlf.size()));
                         std::memmove(buf.data(), buf.data() + dataPos, chunkDataSize);
                     }
                     handler(nullptr, chunkDataSize);
@@ -143,6 +175,7 @@ private:
     const bool m_isChunked;
 
     int m_leftProcessedChunkSize{};
+    int counter{};
 
     std::unique_ptr<llhttp_t> m_httpParser;
     std::size_t m_bodyPieceSize = 0;

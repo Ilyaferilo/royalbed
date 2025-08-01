@@ -1,19 +1,25 @@
 #include <cstddef>
+#include <memory>
 #include <string_view>
 #include "3rdparty/llhttp/llhttp.h"
 
+#include "nhope/async/future.h"
 #include "nhope/io/io-device.h"
+#include "nhope/io/pushback-reader.h"
 #include "nhope/io/string-reader.h"
 
 #include "royalbed/client/http-error.h"
 #include "royalbed/client/request.h"
+#include "royalbed/common/detail/json-reader.h"
 #include "royalbed/common/detail/write-headers.h"
 #include "royalbed/common/detail/body-reader.h"
 #include "royalbed/common/response.h"
 
 #include "royalbed/client/detail/send-request.h"
 
-namespace royalbed::client::detail {
+#include "nhope/io/tcp.h"
+
+namespace royalbed::client {
 
 namespace {
 using namespace std::literals;
@@ -234,6 +240,7 @@ nhope::ReaderPtr makeRequestStream(nhope::AOContext& aoCtx, Request&& request)
 }
 
 }   // namespace
+namespace detail {
 
 nhope::Future<std::size_t> sendRequest(nhope::AOContext& aoCtx, Request&& request, nhope::Writter& device)
 {
@@ -252,4 +259,56 @@ nhope::Future<common::Response> makeRequest(nhope::AOContext& aoCtx, Request&& r
     });
 }
 
-}   // namespace royalbed::client::detail
+class ClientConnection : public std::enable_shared_from_this<ClientConnection>
+{
+public:
+    ClientConnection(nhope::AOContext& aoCtx, nhope::TcpSocketPtr&& socket)
+      : m_socket(std::move(socket))
+      , m_reader(nhope::PushbackReader::create(aoCtx, *m_socket))
+      , m_ctx(aoCtx)
+    {}
+
+    nhope::Future<common::Response> start(Request&& request)
+    {
+        return makeRequest(m_ctx, std::move(request), *m_socket, *m_reader)
+          .then(m_ctx, [self = shared_from_this()](auto r) mutable {
+              if (r.body != nullptr) {
+                  return nhope::readAll(*r.body).then(self->m_ctx, [self, resp = std::move(r)](auto data) mutable {
+                      resp.body = std::make_unique<royalbed::common::detail::StringReader>(
+                        std::string((const char*)data.data(), data.size()));
+                      return (std::move(resp));
+                  });
+              }
+              return nhope::makeReadyFuture<common::Response>(std::move(r));
+          });
+    }
+
+private:
+    std::unique_ptr<nhope::TcpSocket> m_socket;
+    nhope::PushbackReaderPtr m_reader;
+    nhope::AOContext m_ctx;
+};
+
+}   // namespace detail
+
+nhope::Future<common::Response> sendRequest(nhope::AOContext& aoCtx, Request&& request)
+{
+    if (request.uri.host.empty()) {
+        throw std::runtime_error("connection host is empty");
+    }
+    if (request.uri.port == 0) {
+        constexpr auto defaultPort = 80;
+        request.uri.port = defaultPort;
+    }
+    if (auto it = request.headers.find("Host"); it == request.headers.end()) {
+        request.headers["Host"] = request.uri.host + ":" + std::to_string(request.uri.port);
+    }
+
+    return nhope::TcpSocket::connect(aoCtx, request.uri.host, request.uri.port)
+      .then(aoCtx, [&aoCtx, r = std::move(request)](auto s) mutable {
+          auto c = std::make_shared<detail::ClientConnection>(aoCtx, std::move(s));
+          return c->start(std::move(r));
+      });
+}
+
+}   // namespace royalbed::client
