@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <string>
 
 #include "nhope/async/ao-context.h"
 #include "nhope/async/async-invoke.h"
@@ -214,4 +215,27 @@ TEST(ReceiveResponse, TwoResponse)   // NOLINT
           EXPECT_EQ(asString(content), "second-body");
       })
       .get();
+}
+
+TEST(ReceiveResponse, ChunkedEncoding)   // NOLINT
+{
+    nhope::ThreadExecutor executor;
+    nhope::AOContext aoCtx(executor);
+
+    auto conn = nhope::PushbackReader::create(   //
+      aoCtx,                                     //
+      nhope::StringReader::create(aoCtx, "HTTP/1.1 200 OK\r\n"
+                                         "Content-Type: text/plain\r\n"
+                                         "Transfer-Encoding: chunked\r\n"
+                                         "Connection: keep-alive\r\n"
+                                         "\r\n"
+                                         "9\r\n"
+                                         "chunk 1, \r\n"
+                                         "7\r\n"
+                                         "chunk 2\r\n"
+                                         "0\r\n"
+                                         "\r\n"));
+    auto resp = receiveResponse(aoCtx, *conn).get();
+    auto data = nhope::readAll(*resp.body).get();
+    EXPECT_EQ(std::string((const char*)data.data(), data.size()), "chunk 1, chunk 2");
 }

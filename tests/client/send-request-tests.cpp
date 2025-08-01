@@ -1,3 +1,4 @@
+#include <fstream>
 #include <memory>
 #include <system_error>
 
@@ -231,7 +232,7 @@ TEST(SendRequest, SendAndReceive)   // NOLINT
     // EXPECT_EQ(res.status, 200);
 }
 
-TEST(SendRequest, SendGoogle)   // NOLINT
+TEST(SendRequest, SendChunkedReq)   // NOLINT
 {
     nhope::ThreadExecutor executor;
     nhope::AOContext aoCtx(executor);
@@ -239,10 +240,12 @@ TEST(SendRequest, SendGoogle)   // NOLINT
     auto res = sendRequest(aoCtx,
                            {
                              .method = "GET",
-                             .uri = Uri::parse("http://www.google.com/"),
+                             .uri = Uri::parse("http://postman-echo.com/stream/5"),
                            })
                  .get();
     const auto b = nhope::readAll(*res.body).get();
-    printf((const char*)b.data());
+    std::ofstream out("chunked.json");
+    out.write((const char*)b.data(), b.size());
+    out.flush();
     EXPECT_EQ(res.status, 200);
 }
